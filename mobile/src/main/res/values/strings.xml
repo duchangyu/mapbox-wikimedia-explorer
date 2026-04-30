@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">awsome-car</string>
+    <string name="mapbox_access_token" translatable="false">pk.eyJ1IjoiZHVjaGFuZ3l1IiwiYSI6ImNpbWg5eTJ3ZDAwMDR0am0zeHUxaHE5YmYifQ.fse1qJKu7lsGGaYJ7uRiDQ</string>
+</resources>
