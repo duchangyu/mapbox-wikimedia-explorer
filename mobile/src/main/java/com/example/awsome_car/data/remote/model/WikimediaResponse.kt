@@ -6,7 +6,7 @@ import kotlinx.serialization.Serializable
 @Serializable
 data class WikimediaResponse(
     val query: Query? = null,
-    val continueData: ContinueData? = null
+    @SerialName("continue") val continueData: ContinueData? = null
 )
 
 @Serializable
@@ -31,8 +31,8 @@ data class Coordinate(
 
 @Serializable
 data class ImageInfo(
-    val thumburl: String,
-    val url: String,
+    val thumburl: String? = null,
+    val url: String? = null,
     val descriptionurl: String? = null,
     val extmetadata: ExtMetadata? = null
 )
@@ -53,5 +53,5 @@ data class MetadataValue(
 @Serializable
 data class ContinueData(
     val gsroffset: Int? = null,
-    @SerialName("continue") val continueType: String? = null
+    @SerialName("continue") val continueToken: String? = null
 )

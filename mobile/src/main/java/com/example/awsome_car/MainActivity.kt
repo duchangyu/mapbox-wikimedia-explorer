@@ -44,6 +44,7 @@ import com.mapbox.geojson.Point
 import com.mapbox.maps.*
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener
+import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationManager
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotationOptions
 import com.mapbox.maps.plugin.annotation.generated.createPointAnnotationManager
@@ -60,8 +61,10 @@ class MainActivity : ComponentActivity() {
 
     private lateinit var mapView: MapView
     private var annotationManager: PointAnnotationManager? = null
+    private val annotationMap = mutableMapOf<Int, PointAnnotation>()
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        ServiceLocator.init(this)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
@@ -69,11 +72,10 @@ class MainActivity : ComponentActivity() {
         mapView.mapboxMap.loadStyle(Style.MAPBOX_STREETS)
         annotationManager = mapView.annotations.createPointAnnotationManager().apply {
             addClickListener(OnPointAnnotationClickListener { annotation ->
-                val imageIndex = annotation.getData()?.asJsonObject?.get("index")?.asInt ?: -1
-                if (imageIndex != -1) {
-                    val images = viewModel.uiState.value.images
-                    if (imageIndex < images.size) {
-                        val image = images[imageIndex]
+                val imageId = annotation.getData()?.asJsonObject?.get("imageId")?.asInt ?: -1
+                if (imageId != -1) {
+                    val image = viewModel.uiState.value.images.find { it.id == imageId }
+                    if (image != null) {
                         viewModel.onImageSelected(image)
                         zoomToImage(image)
                     }
@@ -93,9 +95,10 @@ class MainActivity : ComponentActivity() {
                     viewModel.onImageSelected(image)
                     zoomToImage(image)
                 },
-                onZoomToFit = { zoomToFit() }
+                onZoomToFit = { zoomToFit() },
+                onLoadMore = { viewModel.loadMore() }
             )
-            
+
             // Sync annotations with UI state
             SyncAnnotations(uiState.images)
 
@@ -117,19 +120,32 @@ class MainActivity : ComponentActivity() {
     @Composable
     private fun SyncAnnotations(images: List<WikiImage>) {
         annotationManager?.let { manager ->
-            manager.deleteAll()
+            val currentIds = annotationMap.keys.toSet()
+            val newIds = images.map { it.id }.toSet()
+
+            // Remove annotations for images no longer present
+            val toRemove = currentIds - newIds
+            toRemove.forEach { id ->
+                annotationMap[id]?.let { manager.delete(it) }
+                annotationMap.remove(id)
+            }
+
+            // Add annotations for new images only
             val markerBitmap = bitmapFromDrawableRes(R.drawable.ic_launcher_foreground)
-            images.forEachIndexed { index, image ->
-                val options = PointAnnotationOptions()
-                    .withPoint(Point.fromLngLat(image.lon, image.lat))
-                    .withData(JsonObject().apply {
-                        addProperty("index", index)
-                    })
-                
-                if (markerBitmap != null) {
-                    options.withIconImage(markerBitmap)
+            images.forEach { image ->
+                if (!annotationMap.containsKey(image.id)) {
+                    val options = PointAnnotationOptions()
+                        .withPoint(Point.fromLngLat(image.lon, image.lat))
+                        .withData(JsonObject().apply {
+                            addProperty("imageId", image.id)
+                        })
+
+                    if (markerBitmap != null) {
+                        options.withIconImage(markerBitmap)
+                    }
+                    val annotation = manager.create(options)
+                    annotationMap[image.id] = annotation
                 }
-                manager.create(options)
             }
         }
     }
@@ -159,8 +175,7 @@ class MainActivity : ComponentActivity() {
     private fun zoomToFit() {
         val uiState = viewModel.uiState.value
         if (uiState.images.isEmpty()) return
-        
-        // Simplified Zoom to Fit - In a real app, use mapboxMap.cameraForCoordinates
+
         val points = uiState.images.map { Point.fromLngLat(it.lon, it.lat) }
         val camera = mapView.mapboxMap.cameraForCoordinates(points, EdgeInsets(100.0, 100.0, 100.0, 100.0))
         mapView.mapboxMap.setCamera(camera)
@@ -175,7 +190,8 @@ fun MainScreen(
     onQueryChanged: (String) -> Unit,
     onToggleList: () -> Unit,
     onImageSelected: (WikiImage) -> Unit,
-    onZoomToFit: () -> Unit
+    onZoomToFit: () -> Unit,
+    onLoadMore: () -> Unit
 ) {
     Box(modifier = Modifier.fillMaxSize()) {
         // Search Bar Overlay
@@ -217,11 +233,14 @@ fun MainScreen(
         if (uiState.isListVisible) {
             ImageListOverlay(
                 images = uiState.images,
+                isLoadingMore = uiState.isLoadingMore,
+                hasMoreResults = uiState.hasMoreResults,
                 onImageSelected = onImageSelected,
-                onClose = onToggleList
+                onClose = onToggleList,
+                onLoadMore = onLoadMore
             )
         }
-        
+
         if (uiState.isLoading) {
             CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
         }
@@ -285,8 +304,11 @@ fun ImagePopup(image: WikiImage, onClose: () -> Unit, modifier: Modifier = Modif
 @Composable
 fun ImageListOverlay(
     images: List<WikiImage>,
+    isLoadingMore: Boolean,
+    hasMoreResults: Boolean,
     onImageSelected: (WikiImage) -> Unit,
-    onClose: () -> Unit
+    onClose: () -> Unit,
+    onLoadMore: () -> Unit
 ) {
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -316,6 +338,24 @@ fun ImageListOverlay(
                         },
                         modifier = Modifier.clickable { onImageSelected(image) }
                     )
+                }
+                if (hasMoreResults || isLoadingMore) {
+                    item {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            if (isLoadingMore) {
+                                CircularProgressIndicator()
+                            } else {
+                                Button(onClick = onLoadMore) {
+                                    Text("Load More")
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
