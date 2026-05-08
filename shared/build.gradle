@@ -3,11 +3,11 @@ plugins {
 }
 android {
     namespace 'com.example.awsome_car.shared'
-    compileSdk 36
+    compileSdk 35
 
     defaultConfig {
-        minSdk 35
-        targetSdk 36
+        minSdk 29
+        targetSdk 35
 
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
