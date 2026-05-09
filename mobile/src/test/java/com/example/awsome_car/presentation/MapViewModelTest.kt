@@ -140,6 +140,16 @@ class MapViewModelTest {
     }
 
     @Test
+    fun `onImageSelected with null clears selectedImage`() = runTest {
+        val image = createWikiImage(id = 1, title = "Image 1", lat = 1.0, lon = 2.0)
+        viewModel.onImageSelected(image)
+
+        viewModel.onImageSelected(null)
+
+        assertNull(viewModel.uiState.value.selectedImage)
+    }
+
+    @Test
     fun `toggleList toggles visibility`() {
         assertFalse(viewModel.uiState.value.isListVisible)
 
@@ -171,6 +181,9 @@ class MapViewModelTest {
         viewModel.search()
         advanceUntilIdle()
 
+        viewModel.onImageSelected(firstPage[0])
+        viewModel.toggleList()
+
         val newImages = listOf(createWikiImage(id = 3, title = "Image 3", lat = 5.0, lon = 6.0))
         fakeRepository.setNextResult(PagedResult(images = newImages, nextOffset = null))
         viewModel.onSearchQueryChanged("tree")
@@ -181,6 +194,8 @@ class MapViewModelTest {
         assertEquals(newImages, state.images)
         assertFalse(state.hasMoreResults)
         assertNull(state.nextOffset)
+        assertNull(state.selectedImage)
+        assertFalse(state.isListVisible)
     }
 
     @Test

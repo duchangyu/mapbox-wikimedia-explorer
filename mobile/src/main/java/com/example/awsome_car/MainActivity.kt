@@ -2,25 +2,46 @@ package com.example.awsome_car
 
 import android.graphics.Bitmap
 import android.graphics.Canvas
-import android.graphics.drawable.Drawable
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.viewModels
 import androidx.appcompat.content.res.AppCompatResources
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.List
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material3.*
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.ListItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextField
+import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -31,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -41,7 +63,10 @@ import com.example.awsome_car.presentation.MapUiState
 import com.example.awsome_car.presentation.MapViewModel
 import com.google.gson.JsonObject
 import com.mapbox.geojson.Point
-import com.mapbox.maps.*
+import com.mapbox.maps.CameraOptions
+import com.mapbox.maps.EdgeInsets
+import com.mapbox.maps.MapView
+import com.mapbox.maps.Style
 import com.mapbox.maps.plugin.annotation.annotations
 import com.mapbox.maps.plugin.annotation.generated.OnPointAnnotationClickListener
 import com.mapbox.maps.plugin.annotation.generated.PointAnnotation
@@ -77,7 +102,6 @@ class MainActivity : ComponentActivity() {
                     val image = viewModel.uiState.value.images.find { it.id == imageId }
                     if (image != null) {
                         viewModel.onImageSelected(image)
-                        zoomToImage(image)
                     }
                 }
                 true
@@ -95,6 +119,7 @@ class MainActivity : ComponentActivity() {
                     viewModel.onImageSelected(image)
                     zoomToImage(image)
                 },
+                onDismissSelectedImage = { viewModel.onImageSelected(null) },
                 onZoomToFit = { zoomToFit() },
                 onLoadMore = { viewModel.loadMore() }
             )
@@ -190,6 +215,7 @@ fun MainScreen(
     onQueryChanged: (String) -> Unit,
     onToggleList: () -> Unit,
     onImageSelected: (WikiImage) -> Unit,
+    onDismissSelectedImage: () -> Unit,
     onZoomToFit: () -> Unit,
     onLoadMore: () -> Unit
 ) {
@@ -222,7 +248,7 @@ fun MainScreen(
         uiState.selectedImage?.let { image ->
             ImagePopup(
                 image = image,
-                onClose = { /* Could be handled by VM */ },
+                onClose = onDismissSelectedImage,
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 100.dp, start = 16.dp, end = 16.dp)
@@ -279,10 +305,13 @@ fun SearchBar(
 @Composable
 fun ImagePopup(image: WikiImage, onClose: () -> Unit, modifier: Modifier = Modifier) {
     Card(
-        shape = RoundedCornerShape(16.dp),
+        shape = RoundedCornerShape(8.dp),
         modifier = modifier.fillMaxWidth()
     ) {
-        Row(modifier = Modifier.padding(8.dp)) {
+        Row(
+            modifier = Modifier.padding(12.dp),
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
             AsyncImage(
                 model = image.thumbUrl,
                 contentDescription = null,
@@ -291,11 +320,37 @@ fun ImagePopup(image: WikiImage, onClose: () -> Unit, modifier: Modifier = Modif
                     .clip(RoundedCornerShape(8.dp)),
                 contentScale = ContentScale.Crop
             )
-            Spacer(modifier = Modifier.width(8.dp))
-            Column {
-                Text(text = image.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
-                Text(text = image.description ?: "No description", style = MaterialTheme.typography.bodySmall, maxLines = 2)
-                Text(text = "Lat: ${image.lat}, Lon: ${image.lon}", style = MaterialTheme.typography.labelSmall)
+            Column(modifier = Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(
+                        text = image.title,
+                        style = MaterialTheme.typography.titleMedium,
+                        maxLines = 2,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = onClose, modifier = Modifier.size(32.dp)) {
+                        Icon(Icons.Default.Close, contentDescription = "Close image details")
+                    }
+                }
+                Text(
+                    text = "Lat: ${image.lat}, Lon: ${image.lon}",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                image.date?.let {
+                    Text(text = "Date: $it", style = MaterialTheme.typography.labelSmall)
+                }
+                image.artist?.let {
+                    Text(
+                        text = "Artist: $it",
+                        style = MaterialTheme.typography.labelSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+                image.license?.let {
+                    Text(text = "License: $it", style = MaterialTheme.typography.labelSmall)
+                }
             }
         }
     }
@@ -324,10 +379,18 @@ fun ImageListOverlay(
                 Button(onClick = onClose) { Text("Close") }
             }
             LazyColumn {
-                items(images) { image ->
+                items(images, key = { it.id }) { image ->
                     ListItem(
-                        headlineContent = { Text(image.title) },
-                        supportingContent = { Text(image.description ?: "") },
+                        headlineContent = {
+                            Text(
+                                text = image.title,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        },
+                        supportingContent = {
+                            Text("Lat: ${image.lat}, Lon: ${image.lon}")
+                        },
                         leadingContent = {
                             AsyncImage(
                                 model = image.thumbUrl,

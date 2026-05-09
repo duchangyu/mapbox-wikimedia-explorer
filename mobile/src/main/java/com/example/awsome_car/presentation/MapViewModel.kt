@@ -41,6 +41,8 @@ class MapViewModel(private val repository: ImageRepository) : ViewModel() {
                     isLoading = true,
                     errorMessage = null,
                     images = emptyList(),
+                    selectedImage = null,
+                    isListVisible = false,
                     hasMoreResults = false,
                     nextOffset = null
                 )
