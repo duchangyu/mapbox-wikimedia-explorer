@@ -1,19 +1,9 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <application>
-        <!-- Minimum Car API level -->
+        <!-- Minimum Car API level shared by mobile and automotive entry points. -->
         <meta-data
             android:name="androidx.car.app.minCarApiLevel"
             android:value="1" />
-
-        <service
-            android:name="com.example.awsome_car.shared.MyCarAppService"
-            android:exported="true">
-            <intent-filter>
-                <action android:name="androidx.car.app.CarAppService" />
-                <!-- Other categories: NAVIGATION, CHARGING, IOT, ... -->
-                <category android:name="androidx.car.app.category.POI" />
-            </intent-filter>
-        </service>
     </application>
 </manifest>

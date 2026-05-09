@@ -2,6 +2,8 @@ package com.example.awsome_car.data.repository
 
 import com.example.awsome_car.data.remote.WikimediaApiService
 import com.example.awsome_car.data.remote.model.Coordinate
+import com.example.awsome_car.data.remote.model.ExtMetadata
+import com.example.awsome_car.data.remote.model.Page
 import com.example.awsome_car.domain.model.PagedResult
 import com.example.awsome_car.domain.model.WikiImage
 import com.example.awsome_car.domain.repository.ImageRepository
@@ -12,41 +14,37 @@ class WikimediaRepository(private val apiService: WikimediaApiService) : ImageRe
 
     override suspend fun searchImages(query: String, offset: Int?): PagedResult = withContext(Dispatchers.IO) {
         val response = apiService.searchImages(query, offset)
+        PagedResult(
+            images = response.query?.pages?.values.orEmpty().mapNotNull { it.toWikiImage() },
+            nextOffset = response.continueData?.gsroffset
+        )
+    }
 
-        val images = response.query?.pages?.values?.mapNotNull { page ->
-            // Try page-level coordinates first, then fall back to extmetadata GPS
-            val pageCoord = page.coordinates?.firstOrNull()
-            val info = page.imageinfo?.firstOrNull()
-            val extMeta = info?.extmetadata
+    private fun Page.toWikiImage(): WikiImage? {
+        val info = imageinfo?.firstOrNull() ?: return null
+        val coordinate = coordinate() ?: return null
+        val metadata = info.extmetadata
 
-            val coord = if (pageCoord != null) {
-                pageCoord
-            } else {
-                // Try to parse GPS coordinates from extmetadata
-                val lat = extMeta?.gpsLatitude?.value?.toDoubleOrNull()
-                val lon = extMeta?.gpsLongitude?.value?.toDoubleOrNull()
-                if (lat != null && lon != null) {
-                    Coordinate(lat = lat, lon = lon)
-                } else null
-            }
+        return WikiImage(
+            id = pageid,
+            title = title,
+            thumbUrl = info.thumburl.orEmpty(),
+            fullUrl = info.url.orEmpty(),
+            lat = coordinate.lat,
+            lon = coordinate.lon,
+            description = metadata?.description?.value,
+            date = metadata?.dateTime?.value,
+            artist = metadata?.artist?.value,
+            license = metadata?.license?.value
+        )
+    }
 
-            if (coord != null && info != null) {
-                WikiImage(
-                    id = page.pageid,
-                    title = page.title,
-                    thumbUrl = info.thumburl ?: "",
-                    fullUrl = info.url ?: "",
-                    lat = coord.lat,
-                    lon = coord.lon,
-                    description = extMeta?.description?.value,
-                    date = extMeta?.dateTime?.value,
-                    artist = extMeta?.artist?.value,
-                    license = extMeta?.license?.value
-                )
-            } else null
-        } ?: emptyList()
+    private fun Page.coordinate(): Coordinate? =
+        coordinates?.firstOrNull() ?: imageinfo?.firstOrNull()?.extmetadata?.coordinate()
 
-        val nextOffset = response.continueData?.gsroffset
-        PagedResult(images = images, nextOffset = nextOffset)
+    private fun ExtMetadata.coordinate(): Coordinate? {
+        val lat = gpsLatitude?.value?.toDoubleOrNull()
+        val lon = gpsLongitude?.value?.toDoubleOrNull()
+        return if (lat != null && lon != null) Coordinate(lat, lon) else null
     }
 }

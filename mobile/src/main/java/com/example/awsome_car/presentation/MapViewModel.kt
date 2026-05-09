@@ -2,6 +2,7 @@ package com.example.awsome_car.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.awsome_car.domain.model.PagedResult
 import com.example.awsome_car.domain.model.WikiImage
 import com.example.awsome_car.domain.repository.ImageRepository
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -37,52 +38,19 @@ class MapViewModel(private val repository: ImageRepository) : ViewModel() {
         if (query.isBlank()) return
 
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(
-                    isLoading = true,
-                    errorMessage = null,
-                    images = emptyList(),
-                    selectedImage = null,
-                    isListVisible = false,
-                    hasMoreResults = false,
-                    nextOffset = null
-                )
-            }
+            _uiState.update { it.prepareForSearch() }
             try {
-                val result = repository.searchImages(query)
-                if (result.images.isEmpty()) {
-                    _uiState.update {
-                        it.copy(
-                            images = emptyList(),
-                            isLoading = false,
-                            errorMessage = "No geotagged images found for '$query'"
-                        )
-                    }
-                } else {
-                    _uiState.update {
-                        it.copy(
-                            images = result.images,
-                            isLoading = false,
-                            hasMoreResults = result.nextOffset != null,
-                            nextOffset = result.nextOffset,
-                            fitBoundsRequestId = it.fitBoundsRequestId + 1
-                        )
-                    }
-                }
+                updateWithSearchResult(query, repository.searchImages(query))
             } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoading = false,
-                        errorMessage = "Network Error: ${e.message}"
-                    )
-                }
+                _uiState.update { it.copy(isLoading = false, errorMessage = e.networkErrorMessage()) }
             }
         }
     }
 
     fun loadMore() {
         val currentState = _uiState.value
-        if (currentState.isLoadingMore || !currentState.hasMoreResults || currentState.nextOffset == null) return
+        val nextOffset = currentState.nextOffset
+        if (!currentState.canLoadMore(nextOffset)) return
 
         val query = currentState.searchQuery
         if (query.isBlank()) return
@@ -90,22 +58,10 @@ class MapViewModel(private val repository: ImageRepository) : ViewModel() {
         viewModelScope.launch {
             _uiState.update { it.copy(isLoadingMore = true, errorMessage = null) }
             try {
-                val result = repository.searchImages(query, currentState.nextOffset)
-                _uiState.update {
-                    it.copy(
-                        images = it.images + result.images,
-                        isLoadingMore = false,
-                        hasMoreResults = result.nextOffset != null,
-                        nextOffset = result.nextOffset
-                    )
-                }
+                val result = repository.searchImages(query, nextOffset)
+                _uiState.update { it.append(result) }
             } catch (e: Exception) {
-                _uiState.update {
-                    it.copy(
-                        isLoadingMore = false,
-                        errorMessage = "Network Error: ${e.message}"
-                    )
-                }
+                _uiState.update { it.copy(isLoadingMore = false, errorMessage = e.networkErrorMessage()) }
             }
         }
     }
@@ -121,4 +77,49 @@ class MapViewModel(private val repository: ImageRepository) : ViewModel() {
     fun dismissError() {
         _uiState.update { it.copy(errorMessage = null) }
     }
+
+    private fun updateWithSearchResult(query: String, result: PagedResult) {
+        _uiState.update { state ->
+            if (result.images.isEmpty()) {
+                state.copy(
+                    images = emptyList(),
+                    isLoading = false,
+                    errorMessage = "No geotagged images found for '$query'"
+                )
+            } else {
+                state.copy(
+                    images = result.images,
+                    isLoading = false,
+                    hasMoreResults = result.hasMoreResults,
+                    nextOffset = result.nextOffset,
+                    fitBoundsRequestId = state.fitBoundsRequestId + 1
+                )
+            }
+        }
+    }
+
+    private fun MapUiState.prepareForSearch(): MapUiState = copy(
+        isLoading = true,
+        errorMessage = null,
+        images = emptyList(),
+        selectedImage = null,
+        isListVisible = false,
+        hasMoreResults = false,
+        nextOffset = null
+    )
+
+    private fun MapUiState.append(result: PagedResult): MapUiState = copy(
+        images = images + result.images,
+        isLoadingMore = false,
+        hasMoreResults = result.hasMoreResults,
+        nextOffset = result.nextOffset
+    )
+
+    private fun MapUiState.canLoadMore(nextOffset: Int?): Boolean =
+        !isLoadingMore && hasMoreResults && nextOffset != null
+
+    private val PagedResult.hasMoreResults: Boolean
+        get() = nextOffset != null
+
+    private fun Exception.networkErrorMessage(): String = "Network Error: $message"
 }
