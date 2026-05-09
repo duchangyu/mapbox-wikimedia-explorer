@@ -2,6 +2,7 @@ package com.example.awsome_car.di
 
 import android.content.Context
 import com.example.awsome_car.data.remote.WikimediaApiService
+import com.example.awsome_car.data.remote.WikimediaHttpConfig
 import com.example.awsome_car.data.repository.WikimediaRepository
 import kotlinx.serialization.json.Json
 import okhttp3.Cache
@@ -43,7 +44,7 @@ object ServiceLocator {
             .connectionSpecs(listOf(ConnectionSpec.MODERN_TLS, ConnectionSpec.CLEARTEXT))
             .addInterceptor { chain ->
                 val request = chain.request().newBuilder()
-                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 13) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Mobile Safari/537.36 AwesomeCarApp/1.0")
+                    .header("User-Agent", WikimediaHttpConfig.USER_AGENT)
                     .header("Accept", "application/json")
                     .build()
                 chain.proceed(request)

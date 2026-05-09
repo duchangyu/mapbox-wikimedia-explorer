@@ -45,18 +45,31 @@ import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.ComposeView
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import coil.compose.AsyncImage
+import coil.request.ImageRequest
+import com.example.awsome_car.data.remote.WikimediaHttpConfig
 import com.example.awsome_car.di.ServiceLocator
 import com.example.awsome_car.domain.model.WikiImage
 import com.example.awsome_car.presentation.MapUiState
@@ -102,6 +115,7 @@ class MainActivity : ComponentActivity() {
                     val image = viewModel.uiState.value.images.find { it.id == imageId }
                     if (image != null) {
                         viewModel.onImageSelected(image)
+                        zoomToImage(image)
                     }
                 }
                 true
@@ -273,7 +287,7 @@ fun MainScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalComposeUiApi::class)
 @Composable
 fun SearchBar(
     query: String,
@@ -281,18 +295,34 @@ fun SearchBar(
     onSearch: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val focusManager = LocalFocusManager.current
+    val submitSearch = {
+        focusManager.clearFocus()
+        keyboardController?.hide()
+        onSearch()
+    }
+
     TextField(
         value = query,
         onValueChange = onQueryChanged,
         placeholder = { Text("Search Wikimedia Commons...") },
         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
         modifier = modifier
+            .onPreviewKeyEvent { event ->
+                if (event.key == Key.Enter && event.type == KeyEventType.KeyUp) {
+                    submitSearch()
+                    true
+                } else {
+                    false
+                }
+            }
             .fillMaxWidth()
             .clip(RoundedCornerShape(24.dp))
             .background(Color.White),
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+        keyboardActions = KeyboardActions(onSearch = { submitSearch() }),
         colors = TextFieldDefaults.colors(
             focusedContainerColor = Color.White,
             unfocusedContainerColor = Color.White,
@@ -312,13 +342,12 @@ fun ImagePopup(image: WikiImage, onClose: () -> Unit, modifier: Modifier = Modif
             modifier = Modifier.padding(12.dp),
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            AsyncImage(
-                model = image.thumbUrl,
-                contentDescription = null,
+            WikimediaThumbnail(
+                image = image,
+                contentDescription = image.title,
                 modifier = Modifier
                     .size(80.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
+                    .clip(RoundedCornerShape(8.dp))
             )
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.Top) {
@@ -392,11 +421,12 @@ fun ImageListOverlay(
                             Text("Lat: ${image.lat}, Lon: ${image.lon}")
                         },
                         leadingContent = {
-                            AsyncImage(
-                                model = image.thumbUrl,
-                                contentDescription = null,
-                                modifier = Modifier.size(56.dp).clip(RoundedCornerShape(4.dp)),
-                                contentScale = ContentScale.Crop
+                            WikimediaThumbnail(
+                                image = image,
+                                contentDescription = image.title,
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(4.dp))
                             )
                         },
                         modifier = Modifier.clickable { onImageSelected(image) }
@@ -422,5 +452,39 @@ fun ImageListOverlay(
                 }
             }
         }
+    }
+}
+
+@Composable
+fun WikimediaThumbnail(
+    image: WikiImage,
+    contentDescription: String?,
+    modifier: Modifier = Modifier
+) {
+    val context = LocalContext.current
+    val imageUrl = image.thumbUrl.ifBlank { image.fullUrl }
+    val request = remember(context, imageUrl) {
+        ImageRequest.Builder(context)
+            .data(imageUrl.ifBlank { null })
+            .crossfade(true)
+            .setHeader("User-Agent", WikimediaHttpConfig.USER_AGENT)
+            .setHeader("Accept", "image/*,*/*;q=0.8")
+            .build()
+    }
+    val fallbackPainter = painterResource(R.drawable.ic_launcher_foreground)
+
+    Box(
+        modifier = modifier.background(MaterialTheme.colorScheme.surfaceVariant),
+        contentAlignment = Alignment.Center
+    ) {
+        AsyncImage(
+            model = request,
+            contentDescription = contentDescription,
+            placeholder = fallbackPainter,
+            error = fallbackPainter,
+            fallback = fallbackPainter,
+            modifier = Modifier.fillMaxSize(),
+            contentScale = ContentScale.Crop
+        )
     }
 }
