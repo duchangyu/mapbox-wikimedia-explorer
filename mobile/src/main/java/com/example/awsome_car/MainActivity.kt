@@ -43,6 +43,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
@@ -140,6 +141,12 @@ class MainActivity : ComponentActivity() {
 
             // Sync annotations with UI state
             SyncAnnotations(uiState.images)
+
+            LaunchedEffect(uiState.fitBoundsRequestId) {
+                if (uiState.fitBoundsRequestId > 0) {
+                    zoomToFit()
+                }
+            }
 
             if (uiState.errorMessage != null) {
                 AlertDialog(

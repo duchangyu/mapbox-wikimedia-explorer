@@ -56,6 +56,7 @@ class MapViewModelTest {
         assertTrue(state.hasMoreResults)
         assertEquals(20, state.nextOffset)
         assertNull(state.errorMessage)
+        assertEquals(1L, state.fitBoundsRequestId)
     }
 
     @Test
@@ -71,6 +72,7 @@ class MapViewModelTest {
         assertFalse(state.isLoading)
         assertNotNull(state.errorMessage)
         assertTrue(state.errorMessage!!.contains("No geotagged images"))
+        assertEquals(0L, state.fitBoundsRequestId)
     }
 
     @Test
@@ -98,6 +100,7 @@ class MapViewModelTest {
         advanceUntilIdle()
 
         fakeRepository.setNextResult(PagedResult(images = secondPage, nextOffset = null))
+        val fitBoundsRequestIdAfterSearch = viewModel.uiState.value.fitBoundsRequestId
         viewModel.loadMore()
         advanceUntilIdle()
 
@@ -108,6 +111,7 @@ class MapViewModelTest {
         assertFalse(state.hasMoreResults)
         assertNull(state.nextOffset)
         assertFalse(state.isLoadingMore)
+        assertEquals(fitBoundsRequestIdAfterSearch, state.fitBoundsRequestId)
     }
 
     @Test

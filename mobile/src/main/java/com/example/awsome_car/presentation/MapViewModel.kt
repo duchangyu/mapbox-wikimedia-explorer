@@ -19,7 +19,8 @@ data class MapUiState(
     val isListVisible: Boolean = false,
     val searchQuery: String = "",
     val hasMoreResults: Boolean = false,
-    val nextOffset: Int? = null
+    val nextOffset: Int? = null,
+    val fitBoundsRequestId: Long = 0L
 )
 
 class MapViewModel(private val repository: ImageRepository) : ViewModel() {
@@ -63,7 +64,8 @@ class MapViewModel(private val repository: ImageRepository) : ViewModel() {
                             images = result.images,
                             isLoading = false,
                             hasMoreResults = result.nextOffset != null,
-                            nextOffset = result.nextOffset
+                            nextOffset = result.nextOffset,
+                            fitBoundsRequestId = it.fitBoundsRequestId + 1
                         )
                     }
                 }
