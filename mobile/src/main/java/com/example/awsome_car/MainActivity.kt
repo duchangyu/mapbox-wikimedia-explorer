@@ -247,8 +247,8 @@ fun MainScreen(
         // Action Buttons
         Column(
             modifier = Modifier
-                .align(Alignment.BottomEnd)
-                .padding(16.dp)
+                .align(Alignment.TopEnd)
+                .padding(top = 88.dp, end = 16.dp)
         ) {
             FloatingActionButton(onClick = onZoomToFit, modifier = Modifier.padding(bottom = 8.dp)) {
                 Icon(Icons.Default.Place, contentDescription = "Zoom to Fit")
