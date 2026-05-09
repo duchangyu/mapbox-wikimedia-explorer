@@ -2,264 +2,237 @@
 
 ## Overview
 
-This Android application displays geotagged images from Wikimedia Commons on an interactive Mapbox map. Users can search for images, view them as map annotations, and browse results in a full-screen list.
+This Android project displays geotagged Wikimedia Commons images on a Mapbox map. The mobile app lets users search by term, renders returned images as map annotations, automatically fits the map to the result extent, and shows image details in a popup or full-screen result list.
+
+The repository also contains Android Auto / Android Automotive entry points backed by the shared car-app module.
+
+## Modules
+
+| Module | Purpose |
+|--------|---------|
+| `mobile` | Phone app with Mapbox map, Wikimedia search, Compose overlays, and image details. |
+| `automotive` | Android Automotive OS host entry point for the shared car app service. |
+| `shared` | Shared AndroidX Car App service/session/screen code and minimum car API metadata. |
+
+Mobile and automotive app modules own their service declarations. The `shared` manifest only declares shared metadata.
 
 ## Architecture Pattern
 
-### MVVM + Repository Pattern
-
-The app follows **MVVM (Model-View-ViewModel)** with the **Repository pattern** for clean separation of concerns:
+The mobile app follows **MVVM** with a repository boundary and small UI/map orchestration components.
 
 ```mermaid
 graph TD
-    subgraph UI Layer
-        A["MainActivity<br/>+ Compose UI"]
+    subgraph UI["UI / Activity Layer"]
+        A["MainActivity<br/>Lifecycle + Map camera orchestration"]
+        B["presentation/components<br/>Compose UI"]
+        C["ImageAnnotationController<br/>Mapbox annotations"]
     end
 
-    subgraph ViewModel Layer
-        B["MapViewModel<br/>StateFlow<MapUiState>"]
+    subgraph VM["ViewModel Layer"]
+        D["MapViewModel<br/>StateFlow<MapUiState>"]
+        E["MapViewModelFactory"]
     end
 
-    subgraph Domain Layer
-        C["ImageRepository<br/>(Interface)"]
-        D["WikiImage<br/>PagedResult"]
+    subgraph Domain["Domain Layer"]
+        F["ImageRepository"]
+        G["WikiImage"]
+        H["PagedResult"]
     end
 
-    subgraph Data Layer
-        E["WikimediaRepository<br/>(Impl)"]
-        F["WikimediaApiService<br/>(Retrofit)"]
+    subgraph Data["Data / Remote Layer"]
+        I["WikimediaRepository"]
+        J["WikimediaApiService"]
+        K["WikimediaHttpConfig"]
+        L["ServiceLocator<br/>Retrofit + OkHttp"]
     end
 
-    subgraph Remote Layer
-        G["Wikimedia Commons<br/>REST API"]
-    end
-
-    A -->|"User Interaction"| B
-    B -->|"Repository Call"| C
-    C -->|"Implementation"| E
-    E -->|"HTTP Requests"| F
-    F -->|"Network"| G
+    A --> B
+    A --> C
+    A --> D
+    E --> D
+    D --> F
+    F --> I
+    I --> J
+    L --> J
+    K --> L
+    K --> B
+    I --> G
+    I --> H
 ```
 
-### Layer Responsibilities
+## Current Package Structure
 
-```mermaid
-graph LR
-    subgraph UI Layer
-        A1["MainActivity<br/>Compose Functions"]
-    end
+| Package / File | Responsibility |
+|----------------|----------------|
+| `MainActivity` | Initializes services, owns `MapView`, wires UI callbacks, handles camera movement, and clears map annotations on destroy. |
+| `map/ImageAnnotationController` | Owns Mapbox `PointAnnotationManager`, marker creation, diff-based sync, click handling, and annotation cleanup. |
+| `presentation/MapViewModel` | Owns `MapUiState`, search/load-more orchestration, selection state, errors, and fit-bounds requests. |
+| `presentation/MapViewModelFactory` | Creates `MapViewModel` with an `ImageRepository`. |
+| `presentation/components/*` | Compose overlays: search bar, action buttons, popup, image list, and thumbnails. |
+| `domain/model/*` | `WikiImage` and `PagedResult` domain models. |
+| `domain/repository/ImageRepository` | Search contract used by the ViewModel. |
+| `data/repository/WikimediaRepository` | Calls the API and maps/filter Wikimedia pages into geotagged `WikiImage` objects. |
+| `data/remote/*` | Retrofit API, HTTP config, and serializable Wikimedia response models. |
+| `di/ServiceLocator` | Builds Retrofit/OkHttp and exposes the repository instance. |
 
-    subgraph ViewModel Layer
-        B1["MapViewModel"]
-    end
-
-    subgraph Domain Layer
-        C1["ImageRepository<br/>WikiImage<br/>PagedResult"]
-    end
-
-    subgraph Data Layer
-        D1["WikimediaRepository<br/>WikimediaApiService"]
-    end
-
-    subgraph Remote Layer
-        E1["Retrofit<br/>OkHttp"]
-    end
-
-    style A1 fill:#e1f5fe
-    style B1 fill:#fff3e0
-    style C1 fill:#e8f5e9
-    style D1 fill:#fce4ec
-    style E1 fill:#f3e5f5
-```
-
-| Layer | Components | Responsibility |
-|-------|-----------|--------------|
-| **UI** | `MainActivity`, Compose functions | Render UI, handle user interactions, sync map annotations |
-| **ViewModel** | `MapViewModel` | Expose UI state via `StateFlow`, orchestrate data operations |
-| **Domain** | `ImageRepository`, `WikiImage`, `PagedResult` | Define business entities and repository contracts |
-| **Data** | `WikimediaRepository`, `WikimediaApiService` | Fetch and transform remote data |
-| **Remote** | Retrofit, OkHttp | Network communication with Wikimedia API |
-
-## Technology Choices
-
-### Mapbox Maps SDK (v11.1.0)
-- **Why**: Industry-leading vector map rendering, smooth gesture handling, and first-class annotation support.
-- **Usage**: `MapView` with `PointAnnotationManager` for marker rendering.
-
-### Retrofit + Kotlinx Serialization
-- **Why**: Type-safe HTTP client with Kotlin-native serialization. No reflection, compact JSON parsing.
-- **Usage**: `WikimediaApiService` defines API endpoints; `Json` parser configured with `ignoreUnknownKeys` for API resilience.
-
-### Kotlin Coroutines + Flow
-- **Why**: Structured concurrency, cancellation support, and reactive UI updates via `StateFlow`.
-- **Usage**: `MapViewModel` exposes `MapUiState` as `StateFlow`; repository calls use `Dispatchers.IO`.
-
-### Coil
-- **Why**: Modern Kotlin-first image loading with built-in memory/disk caching and Compose integration.
-- **Usage**: `AsyncImage` composables for thumbnails in list and popup cards.
-
-### Jetpack Compose
-- **Why**: Declarative UI, easy state-driven recomposition, Material Design 3 components.
-- **Usage**: Search bar, image list overlay, popup card, and loading indicators.
-
-## Data Flow
+## Key Runtime Flows
 
 ### Search Flow
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant UI as MainActivity
+    participant SearchBar
+    participant MainActivity
     participant VM as MapViewModel
-    participant Repo as ImageRepository
+    participant Repo as WikimediaRepository
     participant API as WikimediaApiService
+    participant Map as ImageAnnotationController
 
-    User->>UI: Enter query, trigger search
-    UI->>VM: search(query)
-    VM->>VM: isLoading = true, clear previous
+    User->>SearchBar: Enter term + press search
+    SearchBar->>SearchBar: Clear focus + hide keyboard
+    SearchBar->>MainActivity: onSearch()
+    MainActivity->>VM: search()
+    VM->>VM: prepareForSearch()
     VM->>Repo: searchImages(query)
-    Repo->>API: GET /w/api.php?search=query&offset=0
-    API-->>Repo: JSON Response
-    Repo->>Repo: Map to PagedResult(images, nextOffset)
+    Repo->>API: GET /w/api.php
+    API-->>Repo: WikimediaResponse
     Repo-->>VM: PagedResult
-    VM->>VM: Update MapUiState
-    VM-->>UI: StateFlow emit
-    UI->>UI: Update map annotations
+    VM->>VM: update images + increment fitBoundsRequestId
+    VM-->>MainActivity: StateFlow emits MapUiState
+    MainActivity->>Map: sync(images)
+    MainActivity->>MainActivity: zoomToFit()
+```
+
+Search success increments `fitBoundsRequestId`. `MainActivity` observes that id with `LaunchedEffect` and fits the camera to all returned annotations. `loadMore()` appends results but does not increment this id, so it does not unexpectedly move the map while the user is browsing.
+
+### Annotation Click Flow
+
+```mermaid
+flowchart TD
+    A["User taps marker"] --> B["ImageAnnotationController"]
+    B --> C["Read imageId from annotation data"]
+    C --> D["Resolve WikiImage from imagesById"]
+    D --> E["MainActivity.selectImage(image)"]
+    E --> F["MapViewModel.onImageSelected(image)"]
+    E --> G["MainActivity.zoomToImage(image)"]
+    F --> H["ImagePopup rendered by MainScreen"]
+```
+
+### List Selection Flow
+
+```mermaid
+flowchart TD
+    A["User opens result list"] --> B["ImageListOverlay"]
+    B --> C["User taps an image"]
+    C --> D["MainActivity.selectImage(image)"]
+    D --> E["ViewModel closes list + selects image"]
+    D --> F["Camera zooms to selected image"]
 ```
 
 ### Pagination Flow
 
 ```mermaid
 flowchart LR
-    A["User scrolls to bottom<br/>Taps 'Load More'"] --> B["MapViewModel.loadMore()"]
-    B --> C["Use current searchQuery<br/>+ nextOffset"]
-    C --> D["Fetch next page<br/>from API"]
-    D --> E["Append to existing<br/>images list"]
-    E --> F["Update MapUiState"]
-    F --> G["Only new annotations<br/>created on map"]
+    A["Load More"] --> B["MapViewModel.loadMore()"]
+    B --> C["Repository searchImages(query, nextOffset)"]
+    C --> D["Append images"]
+    D --> E["Annotation controller creates only new markers"]
 ```
 
-### Annotation Click Flow
+## Design Decisions
 
-```mermaid
-flowchart TD
-    A["User taps<br/>map marker"] --> B["OnPointAnnotationClickListener"]
-    B --> C["Extract imageId from<br/>annotation data"]
-    C --> D["Locate corresponding<br/>WikiImage"]
-    D --> E["viewModel.onImageSelected()"]
-    E --> F["Camera zooms to<br/>image location"]
-    F --> G["Display popup card"]
-```
+### 1. Activity Owns Map Camera, Not UI Rendering
 
-## Key Design Decisions
+`MainActivity` owns the Android `MapView` and camera operations (`zoomToImage`, `zoomToFit`). Compose components stay platform-light and communicate through callbacks.
 
-### 1. Incremental Annotation Updates
-**Decision**: Maintain `annotationId -> PointAnnotation` mapping and only create/delete changed annotations.
-**Rationale**: Full rebuild on every state change causes map flicker and poor performance with large datasets. Diff-based updates preserve existing annotations and only mutate what's necessary.
+### 2. Annotation Logic Is Isolated
 
-```mermaid
-flowchart TD
-    A["State Change"] --> B{"Diff Analysis"}
-    B --> C["annotationId -> PointAnnotation"]
-    B --> D["New Images?"]
-    B --> E["Removed Images?"]
-    D -->|Yes| F["Create Only New<br/>Annotations"]
-    E -->|Yes| G["Delete Only Removed<br/>Annotations"]
-    F --> H["Preserve Existing"]
-    G --> H
-    H --> I["No Flicker<br/>Better Performance"]
-```
+`ImageAnnotationController` keeps Mapbox annotation code out of the activity and Compose layer. It maintains:
 
-### 2. PagedResult Wrapper
-**Decision**: Repository returns `PagedResult(images, nextOffset)` instead of raw `List<WikiImage>`.
-**Rationale**: Decouples pagination metadata from UI state. ViewModel decides how to handle `nextOffset`; the API contract is explicit.
+- `annotationsByImageId` for incremental create/delete behavior.
+- `imagesById` for click lookup.
+- A single `PointAnnotationManager` lifecycle with explicit `clear()`.
 
-### 3. ImageRepository Interface
-**Decision**: Extract `ImageRepository` interface; `WikimediaRepository` implements it.
-**Rationale**: Enables test doubles (fakes/mocks) without Robolectric or framework dependencies. ViewModel tests use `FakeImageRepository`.
+### 3. Explicit Fit-Bounds Request
 
-```mermaid
-classDiagram
-    class ImageRepository {
-        <<interface>>
-        +searchImages(query: String, offset: Int): PagedResult
-    }
+`MapUiState.fitBoundsRequestId` is an event-like counter. It avoids deriving camera movement from every image-list change and gives the ViewModel clear control over when the map should fit all annotations.
 
-    class WikimediaRepository {
-        -apiService: WikimediaApiService
-        +searchImages(query: String, offset: Int): PagedResult
-    }
+### 4. UI Split Into Focused Composables
 
-    class FakeImageRepository {
-        +searchImages(query: String, offset: Int): PagedResult
-    }
+Compose UI lives under `presentation/components`:
 
-    ImageRepository <|.. WikimediaRepository
-    ImageRepository <|.. FakeImageRepository
-```
+- `MainScreen` composes the screen and dialogs.
+- `SearchBar` owns IME search behavior and keyboard dismissal.
+- `ImagePopup` displays thumbnail, title, and location metadata.
+- `ImageListOverlay` shows all retrieved images and manual pagination.
+- `WikimediaThumbnail` centralizes Coil image loading, fallback, and Wikimedia headers.
 
-### 4. OkHttp Disk Cache
-**Decision**: Configure 10MB disk cache in `ServiceLocator`.
-**Rationale**: Reduces redundant API calls and image downloads on configuration changes or repeat searches. Coil handles image caching automatically.
+### 5. Wikimedia HTTP Configuration Is Centralized
 
-### 5. No Android Log in Repository
-**Decision**: Removed `android.util.Log` calls from `WikimediaRepository`.
-**Rationale**: Repositories should be framework-agnostic. Android Log breaks JVM unit tests; proper logging should use an injectable abstraction if needed.
+`WikimediaHttpConfig.USER_AGENT` is shared by Retrofit requests and Coil thumbnail requests. This prevents duplicated User-Agent strings and keeps Wikimedia-specific HTTP policy out of UI code.
+
+### 6. Repository Mapping Is Kept Small
+
+`WikimediaRepository` maps API pages through private helpers:
+
+- `Page.toWikiImage()`
+- `Page.coordinate()`
+- `ExtMetadata.coordinate()`
+
+Pages without image info or coordinates are filtered out before reaching the ViewModel.
+
+## Technology Choices
+
+| Technology | Usage |
+|------------|-------|
+| Mapbox Maps SDK | Map rendering, camera movement, and point annotations. |
+| Jetpack Compose | Search overlay, map controls, result list, popup, loading, and error UI. |
+| Retrofit | Wikimedia Commons API client. |
+| Kotlinx Serialization | Wikimedia JSON parsing with unknown-key tolerance. |
+| OkHttp | Timeouts, cache, headers, and logging interceptor. |
+| Coil | Thumbnail loading in Compose with Wikimedia request headers and fallback image. |
+| Coroutines + StateFlow | Async search/load-more operations and reactive UI state. |
+| AndroidX Car App | Shared car service/session/screen used by mobile projection and automotive entry points. |
 
 ## Testing Strategy
 
 ```mermaid
 graph TD
-    subgraph Tests
-        A["MapViewModel Tests"]
-        B["WikimediaRepository Tests"]
-    end
-
-    subgraph Test Doubles
-        C["FakeImageRepository"]
-        D["FakeWikimediaApiService"]
-    end
-
-    subgraph Dependencies
-        E["kotlinx-coroutines-test"]
-        F["StandardTestDispatcher"]
-    end
-
-    A --> C
-    B --> D
-    A --> F
-    D --> E
-
-    style A fill:#e3f2fd
-    style B fill:#e3f2fd
-    style C fill:#fff8e1
-    style D fill:#fff8e1
+    A["MapViewModelTest"] --> B["FakeImageRepository"]
+    C["WikimediaRepositoryTest"] --> D["FakeWikimediaApiService"]
+    A --> E["kotlinx-coroutines-test"]
+    C --> E
 ```
 
-| Component | Approach | Coverage |
-|-----------|----------|----------|
-| `MapViewModel` | `FakeImageRepository` + `StandardTestDispatcher` | Search, pagination, selection, error handling |
-| `WikimediaRepository` | `FakeWikimediaApiService` | Mapping, filtering, pagination, exceptions |
+| Test | Coverage |
+|------|----------|
+| `MapViewModelTest` | Search success/empty/failure, pagination, selected image state, list visibility, fit-bounds request behavior. |
+| `WikimediaRepositoryTest` | API mapping, coordinate fallback from metadata, filtering invalid pages, pagination offset, exception propagation. |
 
-Tests run with `kotlinx-coroutines-test` for coroutine control and `advanceUntilIdle` for async state verification.
+Common verification commands:
 
-Run tests: `./gradlew :mobile:testDebugUnitTest`
+```bash
+./gradlew :mobile:testDebugUnitTest --no-daemon
+./gradlew :automotive:assembleDebug --no-daemon
+./gradlew check --no-daemon
+```
 
 ## Known Limitations & Improvements
 
 ### Current Limitations
-1. **No offline support**: Searches require active network; no local caching of results.
-2. **No retry mechanism**: Network failures show error; no automatic retry with backoff.
-3. **Single-page list**: Large result sets could benefit from virtualized/lazy list with proper paging.
-4. **No image prefetching**: Thumbnails load on-demand; scrolling fast may show placeholders.
-5. **No search history**: Users must retype queries; no saved recent searches.
 
-### Future Improvements
-1. **Room Database**: Cache search results and images for offline browsing.
-2. **WorkManager + Retry**: Background sync with exponential backoff for failed requests.
-3. **Pagination with Paging 3**: Replace manual pagination with Jetpack Paging for list efficiency.
-4. **Image prefetching**: Prefetch next page thumbnails during scroll.
-5. **Search suggestions**: Autocomplete with Wikimedia search suggestions API.
-6. **Proper logging**: Introduce an injectable `Logger` interface for structured logging.
-7. **Error granularity**: Distinguish network errors, server errors, and empty results with specific UI messages.
-8. **Accessibility**: Add content descriptions to map annotations and image list items.
+1. Searches require network; there is no local result database.
+2. Pagination is manual through a "Load More" button rather than Paging 3.
+3. Thumbnails load on demand; there is no proactive prefetching.
+4. Search history and suggestions are not implemented.
+5. Map marker visuals still use the launcher foreground drawable rather than a domain-specific marker asset.
+
+### Possible Improvements
+
+1. Add Room caching for recent search results.
+2. Replace manual paging with Jetpack Paging 3.
+3. Prefetch thumbnails for the next result page.
+4. Add search history or Wikimedia search suggestions.
+5. Replace the marker drawable with a clearer photo/map pin asset.
+6. Add UI tests for search, popup, and list selection flows.
