@@ -1,2 +1,0 @@
-com.example.awsome_car.shared
-xml automotive_app_desc
