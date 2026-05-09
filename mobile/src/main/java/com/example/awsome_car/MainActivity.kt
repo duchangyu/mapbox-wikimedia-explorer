@@ -283,14 +283,21 @@ fun ImagePopup(image: WikiImage, onClose: () -> Unit, modifier: Modifier = Modif
         modifier = modifier.fillMaxWidth()
     ) {
         Row(modifier = Modifier.padding(8.dp)) {
-            AsyncImage(
-                model = image.thumbUrl,
-                contentDescription = null,
+            Box(
                 modifier = Modifier
                     .size(80.dp)
-                    .clip(RoundedCornerShape(8.dp)),
-                contentScale = ContentScale.Crop
-            )
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.LightGray),
+                contentAlignment = Alignment.Center
+            ) {
+                AsyncImage(
+                    model = image.thumbUrl,
+                    contentDescription = image.title,
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop,
+                    onError = { println("Image load error: ${it.result.throwable}") },
+                )
+            }
             Spacer(modifier = Modifier.width(8.dp))
             Column {
                 Text(text = image.title, style = MaterialTheme.typography.titleMedium, maxLines = 1)
