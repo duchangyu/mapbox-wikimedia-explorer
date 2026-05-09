@@ -1,6 +1,7 @@
 package com.example.awsome_car.data.repository
 
 import com.example.awsome_car.data.remote.WikimediaApiService
+import com.example.awsome_car.data.remote.model.Coordinate
 import com.example.awsome_car.domain.model.PagedResult
 import com.example.awsome_car.domain.model.WikiImage
 import com.example.awsome_car.domain.repository.ImageRepository
@@ -13,8 +14,21 @@ class WikimediaRepository(private val apiService: WikimediaApiService) : ImageRe
         val response = apiService.searchImages(query, offset)
 
         val images = response.query?.pages?.values?.mapNotNull { page ->
-            val coord = page.coordinates?.firstOrNull()
+            // Try page-level coordinates first, then fall back to extmetadata GPS
+            val pageCoord = page.coordinates?.firstOrNull()
             val info = page.imageinfo?.firstOrNull()
+            val extMeta = info?.extmetadata
+
+            val coord = if (pageCoord != null) {
+                pageCoord
+            } else {
+                // Try to parse GPS coordinates from extmetadata
+                val lat = extMeta?.gpsLatitude?.value?.toDoubleOrNull()
+                val lon = extMeta?.gpsLongitude?.value?.toDoubleOrNull()
+                if (lat != null && lon != null) {
+                    Coordinate(lat = lat, lon = lon)
+                } else null
+            }
 
             if (coord != null && info != null) {
                 WikiImage(
@@ -24,10 +38,10 @@ class WikimediaRepository(private val apiService: WikimediaApiService) : ImageRe
                     fullUrl = info.url ?: "",
                     lat = coord.lat,
                     lon = coord.lon,
-                    description = info.extmetadata?.description?.value,
-                    date = info.extmetadata?.dateTime?.value,
-                    artist = info.extmetadata?.artist?.value,
-                    license = info.extmetadata?.license?.value
+                    description = extMeta?.description?.value,
+                    date = extMeta?.dateTime?.value,
+                    artist = extMeta?.artist?.value,
+                    license = extMeta?.license?.value
                 )
             } else null
         } ?: emptyList()

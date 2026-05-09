@@ -42,7 +42,9 @@ data class ExtMetadata(
     @SerialName("ImageDescription") val description: MetadataValue? = null,
     @SerialName("DateTimeOriginal") val dateTime: MetadataValue? = null,
     @SerialName("Artist") val artist: MetadataValue? = null,
-    @SerialName("LicenseShortName") val license: MetadataValue? = null
+    @SerialName("LicenseShortName") val license: MetadataValue? = null,
+    @SerialName("GPSLatitude") val gpsLatitude: MetadataValue? = null,
+    @SerialName("GPSLongitude") val gpsLongitude: MetadataValue? = null
 )
 
 @Serializable
