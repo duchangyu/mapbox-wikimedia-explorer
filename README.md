@@ -22,11 +22,11 @@ The core pattern is the same: **search → geocode → annotate → interact**. 
 
 ## Screenshots
 
-| Search Results | Image Popup | Result List |
+| Init | Search | Result List on map |
 |---------------|-------------|-------------|
 | ![Search](screenshots/ScreenShot_2026-05-09_203547_324.png) | ![Popup](screenshots/ScreenShot_2026-05-09_203613_291.png) | ![List](screenshots/ScreenShot_2026-05-09_203638_920.png) |
 
-| Map View | Thumbnail Details | Full List |
+| Map View | Result list | Other search |
 |----------|------------------|-----------|
 | ![Map](screenshots/ScreenShot_2026-05-09_203705_010.png) | ![Details](screenshots/ScreenShot_2026-05-09_203722_582.png) | ![List](screenshots/ScreenShot_2026-05-09_203836_859.png) |
 
