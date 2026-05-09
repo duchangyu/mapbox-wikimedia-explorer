@@ -55,7 +55,7 @@ object ServiceLocator {
             .build()
 
         val retrofit = Retrofit.Builder()
-            .baseUrl("https://commons.wikimedia.org/")
+            .baseUrl(WikimediaHttpConfig.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
