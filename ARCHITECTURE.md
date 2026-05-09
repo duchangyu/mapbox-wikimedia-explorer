@@ -10,23 +10,67 @@ This Android application displays geotagged images from Wikimedia Commons on an 
 
 The app follows **MVVM (Model-View-ViewModel)** with the **Repository pattern** for clean separation of concerns:
 
-```
-UI Layer (MainActivity + Compose)
-    |
-    v
-ViewModel Layer (MapViewModel)
-    |
-    v
-Domain Layer (ImageRepository interface, WikiImage, PagedResult)
-    |
-    v
-Data Layer (WikimediaRepository, WikimediaApiService)
-    |
-    v
-Remote Layer (Wikimedia Commons REST API)
+```mermaid
+graph TD
+    subgraph UI Layer
+        A["MainActivity<br/>+ Compose UI"]
+    end
+
+    subgraph ViewModel Layer
+        B["MapViewModel<br/>StateFlow<MapUiState>"]
+    end
+
+    subgraph Domain Layer
+        C["ImageRepository<br/>(Interface)"]
+        D["WikiImage<br/>PagedResult"]
+    end
+
+    subgraph Data Layer
+        E["WikimediaRepository<br/>(Impl)"]
+        F["WikimediaApiService<br/>(Retrofit)"]
+    end
+
+    subgraph Remote Layer
+        G["Wikimedia Commons<br/>REST API"]
+    end
+
+    A -->|"User Interaction"| B
+    B -->|"Repository Call"| C
+    C -->|"Implementation"| E
+    E -->|"HTTP Requests"| F
+    F -->|"Network"| G
 ```
 
 ### Layer Responsibilities
+
+```mermaid
+graph LR
+    subgraph UI Layer
+        A1["MainActivity<br/>Compose Functions"]
+    end
+
+    subgraph ViewModel Layer
+        B1["MapViewModel"]
+    end
+
+    subgraph Domain Layer
+        C1["ImageRepository<br/>WikiImage<br/>PagedResult"]
+    end
+
+    subgraph Data Layer
+        D1["WikimediaRepository<br/>WikimediaApiService"]
+    end
+
+    subgraph Remote Layer
+        E1["Retrofit<br/>OkHttp"]
+    end
+
+    style A1 fill:#e1f5fe
+    style B1 fill:#fff3e0
+    style C1 fill:#e8f5e9
+    style D1 fill:#fce4ec
+    style E1 fill:#f3e5f5
+```
 
 | Layer | Components | Responsibility |
 |-------|-----------|--------------|
@@ -61,30 +105,70 @@ Remote Layer (Wikimedia Commons REST API)
 ## Data Flow
 
 ### Search Flow
-1. User enters query and triggers search
-2. `MapViewModel.search()` sets `isLoading = true`, clears previous results
-3. `ImageRepository.searchImages(query)` fetches page 1 from API
-4. Response mapped to `PagedResult(images, nextOffset)`
-5. `MapUiState` updated with images, `hasMoreResults`, and `nextOffset`
-6. `MainActivity` observes state change and incrementally updates map annotations
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant UI as MainActivity
+    participant VM as MapViewModel
+    participant Repo as ImageRepository
+    participant API as WikimediaApiService
+
+    User->>UI: Enter query, trigger search
+    UI->>VM: search(query)
+    VM->>VM: isLoading = true, clear previous
+    VM->>Repo: searchImages(query)
+    Repo->>API: GET /w/api.php?search=query&offset=0
+    API-->>Repo: JSON Response
+    Repo->>Repo: Map to PagedResult(images, nextOffset)
+    Repo-->>VM: PagedResult
+    VM->>VM: Update MapUiState
+    VM-->>UI: StateFlow emit
+    UI->>UI: Update map annotations
+```
 
 ### Pagination Flow
-1. User scrolls to bottom of list and taps "Load More"
-2. `MapViewModel.loadMore()` uses current `searchQuery` + `nextOffset`
-3. New page fetched and **appended** to existing images (not replaced)
-4. `MapUiState` updated; only new annotations created on map
+
+```mermaid
+flowchart LR
+    A["User scrolls to bottom<br/>Taps 'Load More'"] --> B["MapViewModel.loadMore()"]
+    B --> C["Use current searchQuery<br/>+ nextOffset"]
+    C --> D["Fetch next page<br/>from API"]
+    D --> E["Append to existing<br/>images list"]
+    E --> F["Update MapUiState"]
+    F --> G["Only new annotations<br/>created on map"]
+```
 
 ### Annotation Click Flow
-1. User taps a map marker
-2. `OnPointAnnotationClickListener` extracts `imageId` from annotation data
-3. Corresponding `WikiImage` located and passed to `viewModel.onImageSelected()`
-4. Camera zooms to image location; popup card displayed
+
+```mermaid
+flowchart TD
+    A["User taps<br/>map marker"] --> B["OnPointAnnotationClickListener"]
+    B --> C["Extract imageId from<br/>annotation data"]
+    C --> D["Locate corresponding<br/>WikiImage"]
+    D --> E["viewModel.onImageSelected()"]
+    E --> F["Camera zooms to<br/>image location"]
+    F --> G["Display popup card"]
+```
 
 ## Key Design Decisions
 
 ### 1. Incremental Annotation Updates
 **Decision**: Maintain `annotationId -> PointAnnotation` mapping and only create/delete changed annotations.
 **Rationale**: Full rebuild on every state change causes map flicker and poor performance with large datasets. Diff-based updates preserve existing annotations and only mutate what's necessary.
+
+```mermaid
+flowchart TD
+    A["State Change"] --> B{"Diff Analysis"}
+    B --> C["annotationId -> PointAnnotation"]
+    B --> D["New Images?"]
+    B --> E["Removed Images?"]
+    D -->|Yes| F["Create Only New<br/>Annotations"]
+    E -->|Yes| G["Delete Only Removed<br/>Annotations"]
+    F --> H["Preserve Existing"]
+    G --> H
+    H --> I["No Flicker<br/>Better Performance"]
+```
 
 ### 2. PagedResult Wrapper
 **Decision**: Repository returns `PagedResult(images, nextOffset)` instead of raw `List<WikiImage>`.
@@ -93,6 +177,26 @@ Remote Layer (Wikimedia Commons REST API)
 ### 3. ImageRepository Interface
 **Decision**: Extract `ImageRepository` interface; `WikimediaRepository` implements it.
 **Rationale**: Enables test doubles (fakes/mocks) without Robolectric or framework dependencies. ViewModel tests use `FakeImageRepository`.
+
+```mermaid
+classDiagram
+    class ImageRepository {
+        <<interface>>
+        +searchImages(query: String, offset: Int): PagedResult
+    }
+
+    class WikimediaRepository {
+        -apiService: WikimediaApiService
+        +searchImages(query: String, offset: Int): PagedResult
+    }
+
+    class FakeImageRepository {
+        +searchImages(query: String, offset: Int): PagedResult
+    }
+
+    ImageRepository <|.. WikimediaRepository
+    ImageRepository <|.. FakeImageRepository
+```
 
 ### 4. OkHttp Disk Cache
 **Decision**: Configure 10MB disk cache in `ServiceLocator`.
@@ -103,6 +207,34 @@ Remote Layer (Wikimedia Commons REST API)
 **Rationale**: Repositories should be framework-agnostic. Android Log breaks JVM unit tests; proper logging should use an injectable abstraction if needed.
 
 ## Testing Strategy
+
+```mermaid
+graph TD
+    subgraph Tests
+        A["MapViewModel Tests"]
+        B["WikimediaRepository Tests"]
+    end
+
+    subgraph Test Doubles
+        C["FakeImageRepository"]
+        D["FakeWikimediaApiService"]
+    end
+
+    subgraph Dependencies
+        E["kotlinx-coroutines-test"]
+        F["StandardTestDispatcher"]
+    end
+
+    A --> C
+    B --> D
+    A --> F
+    D --> E
+
+    style A fill:#e3f2fd
+    style B fill:#e3f2fd
+    style C fill:#fff8e1
+    style D fill:#fff8e1
+```
 
 | Component | Approach | Coverage |
 |-----------|----------|----------|
