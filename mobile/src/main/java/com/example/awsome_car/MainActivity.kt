@@ -18,6 +18,7 @@ import com.mapbox.maps.CameraOptions
 import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
+import com.mapbox.maps.dsl.cameraOptions
 
 class MainActivity : ComponentActivity() {
 
@@ -95,10 +96,16 @@ class MainActivity : ComponentActivity() {
         if (images.isEmpty()) return
 
         val points = images.map { Point.fromLngLat(it.lon, it.lat) }
-        val cameraOptions = mapView.mapboxMap.cameraForCoordinates(
+        mapView.mapboxMap.cameraForCoordinates(
             points,
-            EdgeInsets(100.0, 100.0, 100.0, 100.0)
-        )
-        mapView.mapboxMap.setCamera(cameraOptions)
+            camera = cameraOptions {  },
+            EdgeInsets(100.0, 100.0, 100.0, 100.0),
+            maxZoom = null,
+            offset = null
+        ){
+            cameraPosition ->
+            mapView.mapboxMap.setCamera(cameraPosition)
+        }
+
     }
 }
