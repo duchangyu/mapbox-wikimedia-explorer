@@ -7,11 +7,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.platform.ComposeView
-import com.example.awsome_car.di.ServiceLocator
 import com.example.awsome_car.domain.model.WikiImage
 import com.example.awsome_car.map.ImageAnnotationController
 import com.example.awsome_car.presentation.MapViewModel
-import com.example.awsome_car.presentation.MapViewModelFactory
 import com.example.awsome_car.presentation.components.MainScreen
 import com.mapbox.geojson.Point
 import com.mapbox.maps.CameraOptions
@@ -19,18 +17,17 @@ import com.mapbox.maps.EdgeInsets
 import com.mapbox.maps.MapView
 import com.mapbox.maps.Style
 import com.mapbox.maps.dsl.cameraOptions
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
-    private val viewModel: MapViewModel by viewModels {
-        MapViewModelFactory(ServiceLocator.repository)
-    }
+    private val viewModel: MapViewModel by viewModels()
 
     private lateinit var mapView: MapView
     private lateinit var imageAnnotationController: ImageAnnotationController
 
     override fun onCreate(savedInstanceState: Bundle?) {
-        ServiceLocator.init(applicationContext)
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 

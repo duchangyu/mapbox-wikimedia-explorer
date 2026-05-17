@@ -5,11 +5,13 @@ import androidx.lifecycle.viewModelScope
 import com.example.awsome_car.domain.model.PagedResult
 import com.example.awsome_car.domain.model.WikiImage
 import com.example.awsome_car.domain.repository.ImageRepository
+import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 data class MapUiState(
     val images: List<WikiImage> = emptyList(),
@@ -24,7 +26,10 @@ data class MapUiState(
     val fitBoundsRequestId: Long = 0L
 )
 
-class MapViewModel(private val repository: ImageRepository) : ViewModel() {
+@HiltViewModel
+class MapViewModel @Inject constructor(
+    private val repository: ImageRepository
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(MapUiState())
     val uiState: StateFlow<MapUiState> = _uiState.asStateFlow()

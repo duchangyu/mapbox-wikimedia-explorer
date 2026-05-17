@@ -42,7 +42,6 @@ graph TD
 
     subgraph VM["ViewModel 层"]
         D["MapViewModel<br/>StateFlow<MapUiState>"]
-        E["MapViewModelFactory"]
     end
 
     subgraph Domain["领域层"]
@@ -55,13 +54,12 @@ graph TD
         I["WikimediaRepository"]
         J["WikimediaApiService"]
         K["WikimediaHttpConfig"]
-        L["ServiceLocator<br/>Retrofit + OkHttp"]
+        L["Hilt Modules<br/>Retrofit + OkHttp"]
     end
 
     A --> B
     A --> C
     A --> D
-    E --> D
     D --> F
     F --> I
     I --> J
@@ -74,16 +72,15 @@ graph TD
 
 ## 当前包结构
 
-- `MainActivity`：初始化服务，管理 `MapView`，连接 UI 回调，处理相机移动，在销毁时清除地图标注。
+- `MainActivity`：管理 `MapView`，连接 UI 回调，处理相机移动，在销毁时清除地图标注。
 - `map/ImageAnnotationController`：管理 Mapbox `PointAnnotationManager`，标记创建，**基于 diff 的同步**，点击处理和标注清理。
 - `presentation/MapViewModel`：管理 `MapUiState`，搜索/加载更多的编排，选中状态，错误处理和 fit-bounds 请求。
-- `presentation/MapViewModelFactory`：使用 `ImageRepository` 创建 `MapViewModel`。
 - `presentation/components/*`：Compose 界面组件：搜索栏、操作按钮、弹窗、图片列表和缩略图。
 - `domain/model/*`：`WikiImage` 和 `PagedResult` 领域模型。
 - `domain/repository/ImageRepository`：ViewModel 使用的搜索契约。
 - `data/repository/WikimediaRepository`：调用 API，将 Wikimedia 页面映射/过滤为带地理坐标的 `WikiImage` 对象。
 - `data/remote/*`：Retrofit API、HTTP 配置和可序列化的 Wikimedia 响应模型。
-- `di/ServiceLocator`：构建 Retrofit/OkHttp 并暴露 Repository 实例。
+- `di/*`：Hilt modules，负责 Retrofit/OkHttp 和 Repository 绑定。
 
 ## 关键运行时流程
 

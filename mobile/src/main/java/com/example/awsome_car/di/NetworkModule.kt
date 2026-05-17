@@ -3,7 +3,11 @@ package com.example.awsome_car.di
 import android.content.Context
 import com.example.awsome_car.data.remote.WikimediaApiService
 import com.example.awsome_car.data.remote.WikimediaHttpConfig
-import com.example.awsome_car.data.repository.WikimediaRepository
+import dagger.Module
+import dagger.Provides
+import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.json.Json
 import okhttp3.Cache
 import okhttp3.ConnectionSpec
@@ -14,29 +18,32 @@ import retrofit2.Retrofit
 import retrofit2.converter.kotlinx.serialization.asConverterFactory
 import java.io.File
 import java.util.concurrent.TimeUnit
+import javax.inject.Singleton
 
-object ServiceLocator {
+@Module
+@InstallIn(SingletonComponent::class)
+object NetworkModule {
     private const val CACHE_SIZE_MB = 10L
     private const val CACHE_DIR_NAME = "http_cache"
 
-    private val json = Json {
+    @Provides
+    @Singleton
+    fun provideJson(): Json = Json {
         ignoreUnknownKeys = true
         coerceInputValues = true
     }
 
-    private var _repository: WikimediaRepository? = null
-    val repository: WikimediaRepository
-        get() = _repository ?: throw IllegalStateException(
-            "ServiceLocator not initialized. Call init(context) in Application.onCreate()"
-        )
-
-    fun init(context: Context) {
-        if (_repository != null) return
-
+    @Provides
+    @Singleton
+    fun provideCache(@ApplicationContext context: Context): Cache {
         val cacheDir = File(context.cacheDir, CACHE_DIR_NAME)
-        val cache = Cache(cacheDir, CACHE_SIZE_MB * 1024 * 1024)
+        return Cache(cacheDir, CACHE_SIZE_MB * 1024 * 1024)
+    }
 
-        val okHttpClient = OkHttpClient.Builder()
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(cache: Cache): OkHttpClient =
+        OkHttpClient.Builder()
             .cache(cache)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(30, TimeUnit.SECONDS)
@@ -54,13 +61,17 @@ object ServiceLocator {
             })
             .build()
 
-        val retrofit = Retrofit.Builder()
+    @Provides
+    @Singleton
+    fun provideRetrofit(okHttpClient: OkHttpClient, json: Json): Retrofit =
+        Retrofit.Builder()
             .baseUrl(WikimediaHttpConfig.BASE_URL)
             .client(okHttpClient)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
 
-        val apiService = retrofit.create(WikimediaApiService::class.java)
-        _repository = WikimediaRepository(apiService)
-    }
+    @Provides
+    @Singleton
+    fun provideWikimediaApiService(retrofit: Retrofit): WikimediaApiService =
+        retrofit.create(WikimediaApiService::class.java)
 }

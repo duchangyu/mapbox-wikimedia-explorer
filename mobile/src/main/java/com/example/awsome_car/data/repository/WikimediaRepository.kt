@@ -9,8 +9,11 @@ import com.example.awsome_car.domain.model.WikiImage
 import com.example.awsome_car.domain.repository.ImageRepository
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import javax.inject.Inject
 
-class WikimediaRepository(private val apiService: WikimediaApiService) : ImageRepository {
+class WikimediaRepository @Inject constructor(
+    private val apiService: WikimediaApiService
+) : ImageRepository {
 
     override suspend fun searchImages(query: String, offset: Int?): PagedResult = withContext(Dispatchers.IO) {
         val response = apiService.searchImages(query, offset)

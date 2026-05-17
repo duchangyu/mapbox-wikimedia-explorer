@@ -52,7 +52,6 @@ graph TD
 
     subgraph VM["ViewModel Layer"]
         D["MapViewModel<br/>StateFlow<MapUiState>"]
-        E["MapViewModelFactory"]
     end
 
     subgraph Domain["Domain Layer"]
@@ -65,13 +64,12 @@ graph TD
         I["WikimediaRepository"]
         J["WikimediaApiService"]
         K["WikimediaHttpConfig"]
-        L["ServiceLocator<br/>Retrofit + OkHttp"]
+        L["Hilt Modules<br/>Retrofit + OkHttp"]
     end
 
     A --> B
     A --> C
     A --> D
-    E --> D
     D --> F
     F --> I
     I --> J
@@ -84,16 +82,15 @@ graph TD
 
 ## Current Package Structure
 
-- `MainActivity`: Initializes services, owns `MapView`, wires UI callbacks, handles camera movement, and clears map annotations on destroy.
+- `MainActivity`: Owns `MapView`, wires UI callbacks, handles camera movement, and clears map annotations on destroy.
 - `map/ImageAnnotationController`: Owns Mapbox `PointAnnotationManager`, marker creation, diff-based sync, click handling, and annotation cleanup.
 - `presentation/MapViewModel`: Owns `MapUiState`, search/load-more orchestration, selection state, errors, and fit-bounds requests.
-- `presentation/MapViewModelFactory`: Creates `MapViewModel` with an `ImageRepository`.
 - `presentation/components/*`: Compose overlays: search bar, action buttons, popup, image list, and thumbnails.
 - `domain/model/*`: `WikiImage` and `PagedResult` domain models.
 - `domain/repository/ImageRepository`: Search contract used by the ViewModel.
 - `data/repository/WikimediaRepository`: Calls the API and maps/filter Wikimedia pages into geotagged `WikiImage` objects.
 - `data/remote/*`: Retrofit API, HTTP config, and serializable Wikimedia response models.
-- `di/ServiceLocator`: Builds Retrofit/OkHttp and exposes the repository instance.
+- `di/*`: Hilt modules for Retrofit/OkHttp and repository bindings.
 
 ## Key Runtime Flows
 
